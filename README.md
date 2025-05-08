@@ -1,59 +1,58 @@
 # Epic 7 Secret Shop Refresher
 
-An automated tool for refreshing the Secret Shop in Epic 7 using image detection and mouse control.
+This is a Python application to automate secret shop refreshes in the game Epic 7. It uses image detection and mouse control to find and purchase specific items in the shop.
+
+## Features
+- GUI for easy configuration
+- Select which items to detect and purchase
+- Set mouse positions for shop buttons
+- Start/stop automation with buttons or keyboard shortcuts
+- Scrollable interface for easy navigation
+- Profile icon at the top for fun customization
+
+## Requirements
+- Python 3.8+
+- Windows OS
+- See `requirements.txt` for required Python packages
 
 ## Setup
-
-1. Install Python 3.8 or higher
-2. Install dependencies:
+1. Clone this repository or download the source code.
+2. Place your item images (`cov.jpg`, `mys.jpg`, `fb.jpg`) and your icon image (`icon.jpg`) in the `assets/templates/` directory.
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-
-3. Configure the `.env` file with your settings:
-   ```
-   MAX_REFRESHES=100
-   CONFIDENCE_THRESHOLD=0.8
-   REFRESH_DELAY=2.0
-   CLICK_DELAY=0.5
-   ```
-
-4. Add item template images to `assets/templates/`:
-   - `item1.png`: Template image for the first item to detect
-   - `item2.png`: Template image for the second item to detect
-
-5. Update mouse positions in `src/config.py` with the correct coordinates for your screen:
-   ```python
-   self.purchase_button_pos = (x, y)  # Replace with actual coordinates
-   self.confirm_button_pos = (x, y)   # Replace with actual coordinates
-   self.refresh_button_pos = (x, y)   # Replace with actual coordinates
-   self.confirm_refresh_pos = (x, y)  # Replace with actual coordinates
-   ```
-
-## Usage
-
-1. Open Epic 7 in Google Play Games beta emulator
-2. Navigate to the Secret Shop
-3. Run the script:
+4. Run the program:
    ```bash
    python src/main.py
    ```
 
-4. To stop the program, press Ctrl+C
+## How to Use
+1. **Configure Settings:**
+   - Set the number of max refreshes, confidence threshold, and delays in the Configuration section.
+   - Use the "Get Position" buttons to record the mouse positions for each button in the shop (move your mouse and press Enter).
+2. **Select Items:**
+   - Check the boxes for the items you want the bot to look for and purchase.
+3. **Start/Stop Automation:**
+   - Click the **Start** button or press **Shift** to begin automation.
+   - Click the **Stop** button or press **Escape** to stop the automation.
+   - You can start and stop the process as many times as you like without closing the program.
+4. **Status:**
+   - The status box will show logs and actions as the bot runs. You can scroll through the output.
 
-## Features
-
-- Automated shop refreshing
-- Image detection for specific items
-- Configurable refresh count
-- Automatic purchasing of detected items
-- Error handling and logging
-- Fail-safe mode (move mouse to corner to stop)
+## Keyboard Shortcuts
+- **Shift**: Start the refresher process
+- **Escape**: Stop the refresher process (does not close the window)
 
 ## Notes
+- Make sure your game window is visible and not obstructed by other windows.
+- The bot uses your mouse and screen, so do not use your computer for other tasks while it is running.
+- For best results, use item images cropped directly from your game client.
 
-- Make sure the game window is visible and not minimized
-- The script uses image detection, so it's important to have clear template images
-- Adjust the confidence threshold if needed for better detection
-- The program will automatically stop after reaching the maximum number of refreshes
-- You can stop the program at any time by pressing Ctrl+C or moving your mouse to any corner of the screen 
+## Troubleshooting
+- If images do not appear in the GUI, check that they are named correctly and placed in `assets/templates/`.
+- If you get errors about mouse positions, ensure you have set them using the "Get Position" buttons.
+- If you encounter other issues, check the status box for error messages.
+
+## License
+MIT 
