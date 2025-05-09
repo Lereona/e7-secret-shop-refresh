@@ -7,14 +7,16 @@ class ImageDetector:
     def __init__(self):
         self.config = Config()
         
-    def detect_items(self, screenshot=None, debug=False):
+    def detect_items(self, screenshot=None, debug=False, templates=None):
         # Take screenshot of the game window or use provided screenshot
         if screenshot is None:
             screenshot = pyautogui.screenshot()
         screenshot_bgr = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
         detected_items = []
         debug_img = screenshot_bgr.copy()
-        for template_path in self.config.item_templates:
+        # Use provided templates or default to config
+        template_paths = templates if templates is not None else self.config.item_templates
+        for template_path in template_paths:
             template = cv2.imread(template_path)
             if template is None:
                 print(f"Warning: Could not load template image: {template_path}")

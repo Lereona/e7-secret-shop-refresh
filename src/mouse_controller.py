@@ -46,14 +46,15 @@ class MouseController:
             else:
                 start_x, start_y = pyautogui.position()
                 print(f"Scrolling from current mouse position: ({start_x}, {start_y})")
-            drag_distance = 500  # pixels to drag up (tune as needed)
+            drag_distance = 350  # pixels to drag up (lowered)
+            steps = 10  # faster scroll
+            print(f"[DEBUG] Scrolling with drag_distance={drag_distance}, steps={steps}")
             pyautogui.moveTo(start_x, start_y)
             pyautogui.mouseDown()
-            time.sleep(0.1)
-            steps = 20
+            time.sleep(0.05)
             for i in range(steps):
                 current_y = start_y - (drag_distance * (i + 1) / steps)
-                pyautogui.moveTo(start_x, current_y, duration=0.01)
+                pyautogui.moveTo(start_x, current_y, duration=0.005)
             pyautogui.mouseUp()
             time.sleep(self.config.click_delay)
             print(f"Scrolled to bottom of shop (dragged up {drag_distance} pixels)")

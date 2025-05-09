@@ -53,6 +53,8 @@ class SecretShopRefresherGUI:
         self.item_labels = []  # Store Label widgets
         
         # Load item images
+        self.image_names = ['cov.jpg', 'mys.jpg', 'fb.jpg']
+        self.image_labels = ['Covenant', 'Mystic', 'Friendship']
         self.load_item_images()
         
         self.selected_window = None
@@ -67,6 +69,8 @@ class SecretShopRefresherGUI:
         self.force_test_mode = tk.BooleanVar(value=False)
         self.buy_button_offset_y = 0
         
+        self.skystone_count = 0
+        
         self.create_gui()
         
         self.global_hotkey_thread = threading.Thread(target=self.listen_for_escape, daemon=True)
@@ -74,9 +78,7 @@ class SecretShopRefresherGUI:
         
     def load_item_images(self):
         print("Loading item images...")
-        image_names = ['cov.jpg', 'mys.jpg', 'fb.jpg']
-        
-        for image_name in image_names:
+        for image_name in self.image_names:
             image_path = f'assets/templates/{image_name}'
             print(f"Attempting to load: {image_path}")
             
@@ -260,6 +262,8 @@ class SecretShopRefresherGUI:
             self.status_text.insert(tk.END, f"Detection test error: {e}\n")
 
     def create_gui(self):
+        image_names = self.image_names
+        image_labels = self.image_labels
         # Create a canvas and a vertical scrollbar for the main content
         canvas = tk.Canvas(self.root, borderwidth=0, background="#f0f0f0")
         vscrollbar = ttk.Scrollbar(self.root, orient="vertical", command=canvas.yview)
@@ -379,16 +383,16 @@ class SecretShopRefresherGUI:
                 img_label.pack(padx=5, pady=5)
                 self.item_labels.append(img_label)
                 
-                # Add checkbox
-                ttk.Checkbutton(item_container, text="Select", variable=var).pack(pady=5)
+                # Add checkbox with filename
+                ttk.Checkbutton(item_container, text=f"{image_labels[i]} ({image_names[i]})", variable=var).pack(pady=5)
                 
                 # Add purchase counter
                 counter_label = ttk.Label(item_container, text=f"Purchased: 0")
                 counter_label.pack(pady=5)
                 self.counter_labels.append(counter_label)
             else:
-                # If no image, just show the checkbox
-                ttk.Checkbutton(item_container, text=f"Item {i+1}", variable=var).pack()
+                # If no image, just show the checkbox with filename
+                ttk.Checkbutton(item_container, text=f"Item {i+1} ({image_names[i]})", variable=var).pack()
                 self.counter_labels.append(None)
                 self.item_labels.append(None)
         
@@ -404,6 +408,11 @@ class SecretShopRefresherGUI:
         status_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         status_frame.grid_rowconfigure(0, weight=1)
         status_frame.grid_columnconfigure(0, weight=1)
+        
+        # Add skystone counter display below status section
+        self.skystone_var = tk.StringVar(value="Skystones used: 0")
+        skystone_label = ttk.Label(self.root, textvariable=self.skystone_var, font=("Arial", 12, "bold"))
+        skystone_label.grid(row=4, column=0, sticky='w', padx=10, pady=5)
         
         # Control Buttons
         control_frame = ttk.Frame(main_frame)
@@ -474,7 +483,7 @@ class SecretShopRefresherGUI:
         self.config.item_templates = []
         for i, var in enumerate(self.item_vars):
             if var.get():
-                self.config.item_templates.append(f'assets/templates/{["cov.jpg", "mys.jpg", "fb.jpg"][i]}')
+                self.config.item_templates.append(f'assets/templates/{self.image_names[i]}')
         
         try:
             self.buy_button_offset_y = int(self.buy_offset_var.get())
@@ -492,12 +501,16 @@ class SecretShopRefresherGUI:
         while self.is_running and self.refresh_count < self.config.max_refreshes:
             try:
                 purchased_this_refresh = set()
+                selected_templates = []
+                for i, var in enumerate(self.item_vars):
+                    if var.get():
+                        selected_templates.append(f'assets/templates/{self.image_names[i]}')
                 # 1. Scan for items (before scroll)
                 self.status_text.insert(tk.END, "Scanning for items (before scroll)...\n")
                 screenshot = self.get_window_screenshot()
                 if self.force_test_mode.get():
                     screenshot.save(f'force_test_before_scroll_{self.refresh_count}.png')
-                detected_items = self.detector.detect_items(screenshot=screenshot, debug=True)
+                detected_items = self.detector.detect_items(screenshot=screenshot, debug=True, templates=selected_templates)
                 for item in detected_items:
                     item_x, item_y, item_w, item_h, template_path, conf = item
                     item_id = (item_x, item_y, template_path)
@@ -507,9 +520,11 @@ class SecretShopRefresherGUI:
                         self.status_text.insert(tk.END, msg)
                         self.mouse.purchase_item_at(item_x, item_y, item_w, item_h, click_func=self.click_in_window, buy_button_offset_y=self.buy_button_offset_y)
                         purchased_this_refresh.add(item_id)
+                        # Update only the counter for the purchased item
                         for i, var in enumerate(self.item_vars):
-                            if var.get():
+                            if var.get() and template_path.endswith(self.image_names[i]):
                                 self.update_purchase_counter(i)
+                                break
                         break  # Only one purchase per scan phase, then handle confirm
                 if not detected_items:
                     self.status_text.insert(tk.END, "No item found before scroll.\n")
@@ -521,7 +536,7 @@ class SecretShopRefresherGUI:
                 screenshot = self.get_window_screenshot()
                 if self.force_test_mode.get():
                     screenshot.save(f'force_test_after_scroll_{self.refresh_count}.png')
-                detected_items = self.detector.detect_items(screenshot=screenshot, debug=True)
+                detected_items = self.detector.detect_items(screenshot=screenshot, debug=True, templates=selected_templates)
                 for item in detected_items:
                     item_x, item_y, item_w, item_h, template_path, conf = item
                     item_id = (item_x, item_y, template_path)
@@ -531,9 +546,11 @@ class SecretShopRefresherGUI:
                         self.status_text.insert(tk.END, msg)
                         self.mouse.purchase_item_at(item_x, item_y, item_w, item_h, click_func=self.click_in_window, buy_button_offset_y=self.buy_button_offset_y)
                         purchased_this_refresh.add(item_id)
+                        # Update only the counter for the purchased item
                         for i, var in enumerate(self.item_vars):
-                            if var.get():
+                            if var.get() and template_path.endswith(self.image_names[i]):
                                 self.update_purchase_counter(i)
+                                break
                         break  # Only one purchase per scan phase, then handle confirm
                 if not detected_items:
                     self.status_text.insert(tk.END, "No item found after scroll.\n")
@@ -549,6 +566,9 @@ class SecretShopRefresherGUI:
                 self.click_in_window_absolute(*self.config.confirm_refresh_pos)
                 time.sleep(self.config.click_delay)
                 self.refresh_count += 1
+                # Update skystone counter
+                self.skystone_count += 3
+                self.skystone_var.set(f"Skystones used: {self.skystone_count}")
                 # Wait for refresh animation
                 time.sleep(self.config.refresh_delay)
             except Exception as e:

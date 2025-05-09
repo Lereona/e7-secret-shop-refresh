@@ -21,5 +21,9 @@ class Config:
         self.confirm_refresh_pos = (0, 0)  # Update with actual coordinates
         
         # Timing settings
-        self.refresh_delay = 2.0
-        self.click_delay = 1.0 
+        self.refresh_delay = 1.0
+        self.click_delay = 0.5
+
+    def create_gui(self):
+        image_names = ['cov.jpg', 'mys.jpg', 'fb.jpg']
+        image_labels = ['Covenant', 'Mystic', 'Friendship']
