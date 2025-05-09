@@ -7,10 +7,11 @@ class Config:
         self.max_refreshes = 100
         
         # Image detection settings
-        self.confidence_threshold = 0.8
+        self.confidence_threshold = 0.90
         self.item_templates = [
-            'assets/templates/item1.png',
-            'assets/templates/item2.png'
+            'assets/templates/cov.jpg',
+            'assets/templates/mys.jpg',
+            'assets/templates/fb.jpg'
         ]
         
         # Mouse positions (to be configured)
@@ -21,4 +22,4 @@ class Config:
         
         # Timing settings
         self.refresh_delay = 2.0
-        self.click_delay = 0.5 
+        self.click_delay = 1.0 

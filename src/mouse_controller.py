@@ -1,5 +1,7 @@
 import pyautogui
 import time
+import cv2
+import numpy as np
 from config import Config
 
 class MouseController:
@@ -34,32 +36,28 @@ class MouseController:
         except Exception as e:
             print(f"Error during refresh: {str(e)}")
             
-    def scroll_to_bottom(self):
+    def scroll_to_bottom(self, window_offset=None, window_size=None):
         try:
-            # Get the current mouse position
-            start_x, start_y = pyautogui.position()
-            
-            # Calculate the drag distance (adjust these values based on your screen)
-            drag_distance = 500  # pixels to drag down
-            
-            # Perform the drag operation
+            # Use the vertical center of the window if available, else current mouse position
+            if window_offset and window_size:
+                start_x = window_offset[0] + window_size[0] // 2
+                start_y = window_offset[1] + window_size[1] // 2
+                print(f"Scrolling from window center: ({start_x}, {start_y})")
+            else:
+                start_x, start_y = pyautogui.position()
+                print(f"Scrolling from current mouse position: ({start_x}, {start_y})")
+            drag_distance = 500  # pixels to drag up (tune as needed)
             pyautogui.moveTo(start_x, start_y)
             pyautogui.mouseDown()
-            time.sleep(0.1)  # Small delay before dragging
-            
-            # Smooth drag down
-            steps = 20  # Number of steps for smooth movement
+            time.sleep(0.1)
+            steps = 20
             for i in range(steps):
-                current_y = start_y + (drag_distance * (i + 1) / steps)
+                current_y = start_y - (drag_distance * (i + 1) / steps)
                 pyautogui.moveTo(start_x, current_y, duration=0.01)
-            
             pyautogui.mouseUp()
             time.sleep(self.config.click_delay)
-            print("Scrolled to bottom of shop")
-            
-            # Return mouse to original position
+            print(f"Scrolled to bottom of shop (dragged up {drag_distance} pixels)")
             pyautogui.moveTo(start_x, start_y)
-            
         except Exception as e:
             print(f"Error during scroll: {str(e)}")
             
@@ -82,3 +80,44 @@ class MouseController:
         except Exception as e:
             print(f"Error checking bottom: {str(e)}")
             return False 
+
+    def purchase_item_at(self, item_x, item_y, item_w, item_h, click_func=None, **kwargs):
+        try:
+            # Load the Buy button template
+            buy_template = cv2.imread('assets/templates/buy.jpg')
+            if buy_template is None:
+                print("[ERROR] Could not load buy button template at assets/templates/buy.jpg")
+                return
+            # Take a screenshot of the window
+            screenshot = pyautogui.screenshot()
+            screenshot_bgr = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+            # Crop a horizontal strip at the detected item's Y
+            strip_margin = 30
+            y1 = max(0, item_y - strip_margin)
+            y2 = min(screenshot_bgr.shape[0], item_y + item_h + strip_margin)
+            strip = screenshot_bgr[y1:y2, :]
+            # Match the Buy button in the strip
+            result = cv2.matchTemplate(strip, buy_template, cv2.TM_CCOEFF_NORMED)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+            print(f"[DEBUG] Buy button match confidence: {max_val}")
+            threshold = 0.7  # You can adjust this if needed
+            if max_val >= threshold:
+                buy_x = max_loc[0] + buy_template.shape[1] // 2
+                buy_y = y1 + max_loc[1] + buy_template.shape[0] // 2
+                print(f"Clicking Buy button at ({buy_x}, {buy_y})")
+                if click_func:
+                    click_func(buy_x, buy_y)
+                else:
+                    pyautogui.click(buy_x, buy_y)
+                time.sleep(self.config.click_delay)
+                # Click confirm button (still use configured position)
+                if click_func:
+                    click_func(*self.config.confirm_button_pos)
+                else:
+                    pyautogui.click(self.config.confirm_button_pos)
+                time.sleep(self.config.click_delay)
+                print("Successfully purchased item at detected position")
+            else:
+                print("[WARN] Buy button not found near detected item. No click performed.")
+        except Exception as e:
+            print(f"Error during purchase at detected position: {str(e)}") 

@@ -9,6 +9,8 @@ from image_detector import ImageDetector
 from mouse_controller import MouseController
 from config import Config
 import re
+import keyboard  # Add this import at the top
+import pygetwindow as gw  # Add this import at the top
 
 class SecretShopRefresherGUI:
     def __init__(self, root):
@@ -53,7 +55,22 @@ class SecretShopRefresherGUI:
         # Load item images
         self.load_item_images()
         
+        self.selected_window = None
+        self.window_offset = (0, 0)
+        self.window_size = (0, 0)
+        self.window_list = []
+        self.selected_region = [0, 0, 0, 0]  # x, y, w, h relative to window
+        self.region_set = False
+        self.create_window_selector()
+        self.create_region_selector()
+        
+        self.force_test_mode = tk.BooleanVar(value=False)
+        self.buy_button_offset_y = 0
+        
         self.create_gui()
+        
+        self.global_hotkey_thread = threading.Thread(target=self.listen_for_escape, daemon=True)
+        self.global_hotkey_thread.start()
         
     def load_item_images(self):
         print("Loading item images...")
@@ -87,20 +104,175 @@ class SecretShopRefresherGUI:
                 print(f"Image not found: {image_path}")
                 self.item_photos.append(None)
                 
+    def create_window_selector(self):
+        # Add a dropdown at the top of the GUI for window selection
+        window_frame = ttk.Frame(self.root)
+        window_frame.grid(row=0, column=0, sticky='ew', padx=10, pady=5)
+        ttk.Label(window_frame, text="Select Game Window:").pack(side=tk.LEFT)
+        self.window_var = tk.StringVar()
+        self.window_dropdown = ttk.Combobox(window_frame, textvariable=self.window_var, state='readonly')
+        self.refresh_window_list()
+        self.window_dropdown.pack(side=tk.LEFT, padx=5)
+        ttk.Button(window_frame, text="Refresh List", command=self.refresh_window_list).pack(side=tk.LEFT)
+        ttk.Button(window_frame, text="Set Window", command=self.set_selected_window).pack(side=tk.LEFT)
+
+    def refresh_window_list(self):
+        self.window_list = [w.title for w in gw.getAllWindows() if w.title.strip()]
+        self.window_dropdown['values'] = self.window_list
+        if self.window_list:
+            self.window_var.set(self.window_list[0])
+
+    def set_selected_window(self):
+        title = self.window_var.get()
+        win = next((w for w in gw.getAllWindows() if w.title == title), None)
+        if win:
+            self.selected_window = win
+            self.window_offset = (win.left, win.top)
+            self.window_size = (win.width, win.height)
+            self.status_text.insert(tk.END, f"Selected window: {title} at {self.window_offset} size {self.window_size}\n")
+        else:
+            self.status_text.insert(tk.END, "Window not found!\n")
+
+    def create_region_selector(self):
+        # Add region selection controls below window selector
+        region_frame = ttk.Frame(self.root)
+        region_frame.grid(row=1, column=0, sticky='ew', padx=10, pady=5)
+        ttk.Label(region_frame, text="Detection Region (x, y, w, h):").pack(side=tk.LEFT)
+        self.region_vars = [tk.StringVar(value='0') for _ in range(4)]
+        for i, label in enumerate(['X', 'Y', 'W', 'H']):
+            ttk.Label(region_frame, text=label).pack(side=tk.LEFT)
+            ttk.Entry(region_frame, textvariable=self.region_vars[i], width=5).pack(side=tk.LEFT)
+        ttk.Button(region_frame, text="Set Region", command=self.set_region).pack(side=tk.LEFT)
+        ttk.Button(region_frame, text="Full Window", command=self.set_full_window_region).pack(side=tk.LEFT)
+        ttk.Button(region_frame, text="Set Region by Click", command=self.set_region_by_click).pack(side=tk.LEFT)
+
+    def set_region(self):
+        try:
+            self.selected_region = [int(v.get()) for v in self.region_vars]
+            self.region_set = True
+            self.status_text.insert(tk.END, f"Detection region set to {self.selected_region}\n")
+        except Exception as e:
+            self.status_text.insert(tk.END, f"Error setting region: {e}\n")
+
+    def set_full_window_region(self):
+        if self.selected_window:
+            self.selected_region = [0, 0, self.window_size[0], self.window_size[1]]
+            for i, v in enumerate(self.selected_region):
+                self.region_vars[i].set(str(v))
+            self.region_set = True
+            self.status_text.insert(tk.END, f"Detection region set to full window: {self.selected_region}\n")
+        else:
+            self.status_text.insert(tk.END, "No window selected!\n")
+
+    def set_region_by_click(self):
+        if not self.selected_window:
+            self.status_text.insert(tk.END, "No window selected!\n")
+            return
+        self.status_text.insert(tk.END, "Move mouse to TOP-LEFT of region and press Enter...\n")
+        self.root.update()
+        def on_enter_top_left(event):
+            top_left = pyautogui.position()
+            self.status_text.insert(tk.END, f"Top-left: {top_left}\nMove mouse to BOTTOM-RIGHT of region and press Enter...\n")
+            self.root.unbind('<Return>')
+            def on_enter_bottom_right(event):
+                bottom_right = pyautogui.position()
+                self.status_text.insert(tk.END, f"Bottom-right: {bottom_right}\n")
+                win_x, win_y = self.window_offset
+                x1, y1 = top_left[0] - win_x, top_left[1] - win_y
+                x2, y2 = bottom_right[0] - win_x, bottom_right[1] - win_y
+                rx, ry = min(x1, x2), min(y1, y2)
+                rw, rh = abs(x2 - x1), abs(y2 - y1)
+                self.selected_region = [rx, ry, rw, rh]
+                for i, v in enumerate(self.selected_region):
+                    self.region_vars[i].set(str(v))
+                self.region_set = True
+                self.status_text.insert(tk.END, f"Detection region set by click: {self.selected_region}\n")
+                self.root.unbind('<Return>')
+            self.root.bind('<Return>', on_enter_bottom_right)
+        self.root.bind('<Return>', on_enter_top_left)
+
+    def get_window_screenshot(self):
+        if self.selected_window:
+            x, y = self.window_offset
+            w, h = self.window_size
+            # Always use the full window for detection
+            region = (x, y, w, h)
+            screenshot = pyautogui.screenshot(region=region)
+            return screenshot
+        else:
+            return pyautogui.screenshot()
+
+    def region_offset(self):
+        # Returns (rx, ry) offset for clicks if region is set
+        if self.region_set:
+            return self.selected_region[0], self.selected_region[1]
+        return 0, 0
+
+    def click_in_window(self, x, y):
+        if self.selected_window:
+            win_x, win_y = self.window_offset
+            rx, ry = self.region_offset()
+            screen_x = win_x + rx + x
+            screen_y = win_y + ry + y
+        else:
+            screen_x, screen_y = x, y
+        # Validate click is within screen bounds
+        screen_w, screen_h = pyautogui.size()
+        if 0 <= screen_x < screen_w and 0 <= screen_y < screen_h:
+            pyautogui.click(screen_x, screen_y)
+        else:
+            self.status_text.insert(tk.END, f"Click out of bounds: ({screen_x}, {screen_y})\n")
+
+    def click_in_window_absolute(self, x, y):
+        if self.selected_window:
+            win_x, win_y = self.window_offset
+            screen_x = win_x + x
+            screen_y = win_y + y
+        else:
+            screen_x, screen_y = x, y
+        screen_w, screen_h = pyautogui.size()
+        if 0 <= screen_x < screen_w and 0 <= screen_y < screen_h:
+            pyautogui.click(screen_x, screen_y)
+        else:
+            self.status_text.insert(tk.END, f"Click out of bounds: ({screen_x}, {screen_y})\n")
+
+    def test_click(self):
+        # Test click at purchase button position
+        try:
+            pos = self.parse_position(self.purchase_pos_var.get())
+            self.click_in_window(*pos)
+            self.status_text.insert(tk.END, f"Test click at {pos} in window offset.\n")
+        except Exception as e:
+            self.status_text.insert(tk.END, f"Test click error: {e}\n")
+
+    def test_detection(self):
+        try:
+            screenshot = self.get_window_screenshot()
+            screenshot.save('test_detection_screenshot.png')
+            self.status_text.insert(tk.END, "Saved screenshot for detection test as test_detection_screenshot.png\n")
+            # Optionally, run detection and show result
+            item_info = self.detector.detect_items()
+            if item_info:
+                self.status_text.insert(tk.END, f"Detection test: Item found at {item_info}\n")
+            else:
+                self.status_text.insert(tk.END, "Detection test: No item found.\n")
+        except Exception as e:
+            self.status_text.insert(tk.END, f"Detection test error: {e}\n")
+
     def create_gui(self):
         # Create a canvas and a vertical scrollbar for the main content
         canvas = tk.Canvas(self.root, borderwidth=0, background="#f0f0f0")
         vscrollbar = ttk.Scrollbar(self.root, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=vscrollbar.set)
-        vscrollbar.grid(row=0, column=1, sticky="ns")
-        canvas.grid(row=0, column=0, sticky="nsew")
-        self.root.grid_rowconfigure(0, weight=1)
+        # Place main content at row=2
+        vscrollbar.grid(row=2, column=1, sticky="ns")
+        canvas.grid(row=2, column=0, sticky="nsew")
+        self.root.grid_rowconfigure(2, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
         # Create a frame inside the canvas to hold all widgets
         main_frame = ttk.Frame(canvas, padding="20")
         self.main_frame = main_frame  # Store reference if needed
-        
         # Add the frame to the canvas
         frame_id = canvas.create_window((0, 0), window=main_frame, anchor="nw")
 
@@ -171,6 +343,12 @@ class SecretShopRefresherGUI:
         ttk.Entry(mouse_frame, textvariable=self.confirm_refresh_pos_var, width=20).grid(row=3, column=1, sticky=tk.W)
         ttk.Button(mouse_frame, text="Get Position", command=lambda: self.get_position("confirm_refresh")).grid(row=3, column=2)
         
+        # Add Get Buy Offset button
+        ttk.Button(mouse_frame, text="Get Buy Offset", command=self.get_buy_offset).grid(row=4, column=2)
+        self.buy_offset_var = tk.StringVar(value=str(self.buy_button_offset_y))
+        ttk.Label(mouse_frame, text="Buy Offset Y:").grid(row=4, column=0, sticky=tk.W)
+        ttk.Entry(mouse_frame, textvariable=self.buy_offset_var, width=10).grid(row=4, column=1, sticky=tk.W)
+        
         # Item Selection Section
         item_frame = ttk.LabelFrame(main_frame, text="Item Selection", padding="10")
         item_frame.grid(row=row_offset + 2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=10)
@@ -237,28 +415,37 @@ class SecretShopRefresherGUI:
         self.stop_button = ttk.Button(control_frame, text="Stop", command=self.stop_refresher, state=tk.DISABLED)
         self.stop_button.grid(row=0, column=1, padx=5)
         
-        # Bind Escape key to stop refresher, and Shift to start refresher
-        self.root.bind('<Escape>', self.handle_escape)
+        # Bind Shift to start refresher
         self.root.bind('<Shift_L>', self.handle_shift)
         self.root.bind('<Shift_R>', self.handle_shift)
+        
+        # Place test buttons at row=3 (below main content)
+        test_frame = ttk.Frame(self.root)
+        test_frame.grid(row=3, column=0, sticky='ew', padx=10, pady=5)
+        ttk.Button(test_frame, text="Test Click", command=self.test_click).pack(side=tk.LEFT, padx=5)
+        ttk.Button(test_frame, text="Test Detection", command=self.test_detection).pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(test_frame, text="Force Test Mode (log everything)", variable=self.force_test_mode).pack(side=tk.LEFT, padx=5)
         
     def get_position(self, button_type):
         self.status_text.insert(tk.END, f"Move mouse to {button_type} position and press Enter...\n")
         self.root.update()
-        
         def on_enter(event):
             pos = pyautogui.position()
+            if self.selected_window:
+                win_x, win_y = self.window_offset
+                rel_pos = (pos[0] - win_x, pos[1] - win_y)
+            else:
+                rel_pos = pos
             if button_type == "purchase":
-                self.purchase_pos_var.set(str(pos))
+                self.purchase_pos_var.set(str(rel_pos))
             elif button_type == "confirm":
-                self.confirm_pos_var.set(str(pos))
+                self.confirm_pos_var.set(str(rel_pos))
             elif button_type == "refresh":
-                self.refresh_pos_var.set(str(pos))
+                self.refresh_pos_var.set(str(rel_pos))
             elif button_type == "confirm_refresh":
-                self.confirm_refresh_pos_var.set(str(pos))
-            self.status_text.insert(tk.END, f"Position set to {pos}\n")
+                self.confirm_refresh_pos_var.set(str(rel_pos))
+            self.status_text.insert(tk.END, f"Position set to {rel_pos}\n")
             self.root.unbind('<Return>')
-            
         self.root.bind('<Return>', on_enter)
         
     def parse_position(self, pos_str):
@@ -289,6 +476,11 @@ class SecretShopRefresherGUI:
             if var.get():
                 self.config.item_templates.append(f'assets/templates/{["cov.jpg", "mys.jpg", "fb.jpg"][i]}')
         
+        try:
+            self.buy_button_offset_y = int(self.buy_offset_var.get())
+        except Exception:
+            self.buy_button_offset_y = 0
+        
     def update_purchase_counter(self, item_index):
         """Update the purchase counter for a specific item"""
         if 0 <= item_index < len(self.purchase_counters):
@@ -299,43 +491,70 @@ class SecretShopRefresherGUI:
     def refresh_loop(self):
         while self.is_running and self.refresh_count < self.config.max_refreshes:
             try:
-                # Scroll to bottom of shop
-                self.status_text.insert(tk.END, "Scrolling to bottom of shop...\n")
-                self.mouse.scroll_to_bottom()
-                
-                # Check if we're at the bottom
-                if self.mouse.is_at_bottom():
-                    self.status_text.insert(tk.END, "Reached bottom of shop, scanning for items...\n")
-                    
-                    # Check for items
-                    items_found = self.detector.detect_items()
-                    
-                    if items_found:
-                        self.status_text.insert(tk.END, "Items found! Attempting to purchase...\n")
-                        self.mouse.purchase_items()
-                        
-                        # Update purchase counter for the found item
-                        # Note: You'll need to modify the detector to return which item was found
-                        # For now, we'll update all selected items
+                purchased_this_refresh = set()
+                # 1. Scan for items (before scroll)
+                self.status_text.insert(tk.END, "Scanning for items (before scroll)...\n")
+                screenshot = self.get_window_screenshot()
+                if self.force_test_mode.get():
+                    screenshot.save(f'force_test_before_scroll_{self.refresh_count}.png')
+                detected_items = self.detector.detect_items(screenshot=screenshot, debug=True)
+                for item in detected_items:
+                    item_x, item_y, item_w, item_h, template_path, conf = item
+                    item_id = (item_x, item_y, template_path)
+                    if item_id not in purchased_this_refresh:
+                        msg = f"[BEFORE SCROLL] Item at ({item_x}, {item_y}) from {template_path} (conf: {conf:.2f}), purchasing...\n"
+                        print(msg.strip())
+                        self.status_text.insert(tk.END, msg)
+                        self.mouse.purchase_item_at(item_x, item_y, item_w, item_h, click_func=self.click_in_window, buy_button_offset_y=self.buy_button_offset_y)
+                        purchased_this_refresh.add(item_id)
                         for i, var in enumerate(self.item_vars):
                             if var.get():
                                 self.update_purchase_counter(i)
-                    
-                    # Refresh shop
-                    self.status_text.insert(tk.END, f"Refreshing shop... (Refresh {self.refresh_count + 1}/{self.config.max_refreshes})\n")
-                    self.mouse.refresh_shop()
-                    self.refresh_count += 1
-                    
-                    # Wait for refresh animation
-                    time.sleep(self.config.refresh_delay)
-                else:
-                    self.status_text.insert(tk.END, "Not at bottom yet, continuing to scroll...\n")
-                    time.sleep(0.5)  # Small delay before next scroll attempt
-                
+                        break  # Only one purchase per scan phase, then handle confirm
+                if not detected_items:
+                    self.status_text.insert(tk.END, "No item found before scroll.\n")
+                # 2. Scroll
+                self.status_text.insert(tk.END, "Scrolling to bottom of shop...\n")
+                self.mouse.scroll_to_bottom(window_offset=self.window_offset, window_size=self.window_size)
+                # 3. Scan for items (after scroll)
+                self.status_text.insert(tk.END, "Scanning for items (after scroll)...\n")
+                screenshot = self.get_window_screenshot()
+                if self.force_test_mode.get():
+                    screenshot.save(f'force_test_after_scroll_{self.refresh_count}.png')
+                detected_items = self.detector.detect_items(screenshot=screenshot, debug=True)
+                for item in detected_items:
+                    item_x, item_y, item_w, item_h, template_path, conf = item
+                    item_id = (item_x, item_y, template_path)
+                    if item_id not in purchased_this_refresh:
+                        msg = f"[AFTER SCROLL] Item at ({item_x}, {item_y}) from {template_path} (conf: {conf:.2f}), purchasing...\n"
+                        print(msg.strip())
+                        self.status_text.insert(tk.END, msg)
+                        self.mouse.purchase_item_at(item_x, item_y, item_w, item_h, click_func=self.click_in_window, buy_button_offset_y=self.buy_button_offset_y)
+                        purchased_this_refresh.add(item_id)
+                        for i, var in enumerate(self.item_vars):
+                            if var.get():
+                                self.update_purchase_counter(i)
+                        break  # Only one purchase per scan phase, then handle confirm
+                if not detected_items:
+                    self.status_text.insert(tk.END, "No item found after scroll.\n")
+                # 4. Refresh shop (use absolute window coords)
+                msg = f"Refreshing shop... (Refresh {self.refresh_count + 1}/{self.config.max_refreshes}) at {self.config.refresh_button_pos}\n"
+                print(msg.strip())
+                self.status_text.insert(tk.END, msg)
+                self.click_in_window_absolute(*self.config.refresh_button_pos)
+                time.sleep(self.config.click_delay)
+                msg = f"Confirming refresh at {self.config.confirm_refresh_pos}\n"
+                print(msg.strip())
+                self.status_text.insert(tk.END, msg)
+                self.click_in_window_absolute(*self.config.confirm_refresh_pos)
+                time.sleep(self.config.click_delay)
+                self.refresh_count += 1
+                # Wait for refresh animation
+                time.sleep(self.config.refresh_delay)
             except Exception as e:
                 self.status_text.insert(tk.END, f"Error occurred: {str(e)}\n")
+                print(f"[ERROR] {e}")
                 break
-                
         self.is_running = False
         self.start_button.config(state=tk.NORMAL)
         self.stop_button.config(state=tk.DISABLED)
@@ -356,11 +575,30 @@ class SecretShopRefresherGUI:
         self.stop_button.config(state=tk.DISABLED)
         self.status_text.insert(tk.END, "Stopping refresher...\n")
 
-    def handle_escape(self, event=None):
-        self.stop_refresher()
-
     def handle_shift(self, event=None):
         self.start_refresher()
+
+    def listen_for_escape(self):
+        while True:
+            keyboard.wait('esc')
+            self.stop_refresher()
+
+    def get_buy_offset(self):
+        self.status_text.insert(tk.END, "Move mouse to CENTER of item icon and press Enter...\n")
+        self.root.update()
+        def on_enter_item(event):
+            item_pos = pyautogui.position()
+            self.status_text.insert(tk.END, f"Item icon center: {item_pos}\nMove mouse to CENTER of Buy button in same row and press Enter...\n")
+            self.root.unbind('<Return>')
+            def on_enter_buy(event):
+                buy_pos = pyautogui.position()
+                offset_y = buy_pos[1] - item_pos[1]
+                self.buy_button_offset_y = offset_y
+                self.buy_offset_var.set(str(offset_y))
+                self.status_text.insert(tk.END, f"Buy button offset Y set to {offset_y}\n")
+                self.root.unbind('<Return>')
+            self.root.bind('<Return>', on_enter_buy)
+        self.root.bind('<Return>', on_enter_item)
 
 if __name__ == "__main__":
     root = tk.Tk()
