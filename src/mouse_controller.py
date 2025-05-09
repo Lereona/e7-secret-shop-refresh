@@ -83,6 +83,9 @@ class MouseController:
             return False 
 
     def purchase_item_at(self, item_x, item_y, item_w, item_h, click_func=None, **kwargs):
+        """
+        Clicks the Buy button for a detected item, then clicks Confirm. After this, control returns to the main loop (which will scroll and continue).
+        """
         try:
             # Load the Buy button template
             buy_template = cv2.imread('assets/templates/buy.jpg')
@@ -104,8 +107,8 @@ class MouseController:
             threshold = 0.7  # You can adjust this if needed
             if max_val >= threshold:
                 buy_x = max_loc[0] + buy_template.shape[1] // 2
-                buy_y = y1 + max_loc[1] + buy_template.shape[0] // 2
-                print(f"Clicking Buy button at ({buy_x}, {buy_y})")
+                buy_y = y1 + max_loc[1] + buy_template.shape[0] // 2 + 5  # Add a few pixels to click slightly lower
+                print(f"Clicking Buy button at ({buy_x}, {buy_y}) (with +5px y-offset)")
                 if click_func:
                     click_func(buy_x, buy_y)
                 else:
@@ -117,7 +120,7 @@ class MouseController:
                 else:
                     pyautogui.click(self.config.confirm_button_pos)
                 time.sleep(self.config.click_delay)
-                print("Successfully purchased item at detected position")
+                print("Successfully purchased item at detected position (Buy + Confirm)")
             else:
                 print("[WARN] Buy button not found near detected item. No click performed.")
         except Exception as e:
