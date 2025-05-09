@@ -7,7 +7,7 @@ class Config:
         self.max_refreshes = 100
         
         # Image detection settings
-        self.confidence_threshold = 0.90
+        self.confidence_threshold = 0.97
         self.item_templates = [
             'assets/templates/cov.jpg',
             'assets/templates/mys.jpg',

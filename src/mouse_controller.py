@@ -46,15 +46,15 @@ class MouseController:
             else:
                 start_x, start_y = pyautogui.position()
                 print(f"Scrolling from current mouse position: ({start_x}, {start_y})")
-            drag_distance = 350  # pixels to drag up (lowered)
-            steps = 10  # faster scroll
+            drag_distance = 400  # increased scroll distance
+            steps = 5  # fast scroll
             print(f"[DEBUG] Scrolling with drag_distance={drag_distance}, steps={steps}")
             pyautogui.moveTo(start_x, start_y)
             pyautogui.mouseDown()
-            time.sleep(0.05)
+            time.sleep(0.02)
             for i in range(steps):
                 current_y = start_y - (drag_distance * (i + 1) / steps)
-                pyautogui.moveTo(start_x, current_y, duration=0.005)
+                pyautogui.moveTo(start_x, current_y, duration=0.002)
             pyautogui.mouseUp()
             time.sleep(self.config.click_delay)
             print(f"Scrolled to bottom of shop (dragged up {drag_distance} pixels)")
@@ -83,16 +83,13 @@ class MouseController:
             return False 
 
     def purchase_item_at(self, item_x, item_y, item_w, item_h, click_func=None, **kwargs):
-        """
-        Clicks the Buy button for a detected item, then clicks Confirm. After this, control returns to the main loop (which will scroll and continue).
-        """
         try:
             # Load the Buy button template
             buy_template = cv2.imread('assets/templates/buy.jpg')
             if buy_template is None:
                 print("[ERROR] Could not load buy button template at assets/templates/buy.jpg")
                 return
-            # Take a screenshot of the window
+            # Take a screenshot of the window (before click)
             screenshot = pyautogui.screenshot()
             screenshot_bgr = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
             # Crop a horizontal strip at the detected item's Y
@@ -107,20 +104,42 @@ class MouseController:
             threshold = 0.7  # You can adjust this if needed
             if max_val >= threshold:
                 buy_x = max_loc[0] + buy_template.shape[1] // 2
-                buy_y = y1 + max_loc[1] + buy_template.shape[0] // 2 + 5  # Add a few pixels to click slightly lower
-                print(f"Clicking Buy button at ({buy_x}, {buy_y}) (with +5px y-offset)")
+                buy_y = y1 + max_loc[1] + buy_template.shape[0] // 2
+                print(f"Clicking Buy button at ({buy_x}, {buy_y})")
                 if click_func:
                     click_func(buy_x, buy_y)
                 else:
                     pyautogui.click(buy_x, buy_y)
                 time.sleep(self.config.click_delay)
-                # Click confirm button (still use configured position)
-                if click_func:
-                    click_func(*self.config.confirm_button_pos)
+                # Take a fresh screenshot and detect confirmBuy button near the center of the screen
+                confirm_buy_template = cv2.imread('assets/templates/confirmBuy.jpg')
+                if confirm_buy_template is not None:
+                    screenshot2 = pyautogui.screenshot()
+                    screenshot2_bgr = cv2.cvtColor(np.array(screenshot2), cv2.COLOR_RGB2BGR)
+                    h, w, _ = screenshot2_bgr.shape
+                    center_y = h // 2
+                    region_margin = 100
+                    region_y1 = max(0, center_y - region_margin)
+                    region_y2 = min(h, center_y + region_margin)
+                    region = screenshot2_bgr[region_y1:region_y2, :]
+                    result_cb = cv2.matchTemplate(region, confirm_buy_template, cv2.TM_CCOEFF_NORMED)
+                    min_val_cb, max_val_cb, min_loc_cb, max_loc_cb = cv2.minMaxLoc(result_cb)
+                    print(f"[DEBUG] confirmBuy match confidence: {max_val_cb}")
+                    cb_threshold = 0.7
+                    if max_val_cb >= cb_threshold:
+                        cb_x = max_loc_cb[0] + confirm_buy_template.shape[1] // 2
+                        cb_y = region_y1 + max_loc_cb[1] + confirm_buy_template.shape[0] // 2
+                        print(f"Clicking confirmBuy at ({cb_x}, {cb_y})")
+                        if click_func:
+                            click_func(cb_x, cb_y)
+                        else:
+                            pyautogui.click(cb_x, cb_y)
+                        time.sleep(self.config.click_delay)
+                    else:
+                        print("[WARN] confirmBuy button not found near center. Skipping confirmBuy click.")
                 else:
-                    pyautogui.click(self.config.confirm_button_pos)
-                time.sleep(self.config.click_delay)
-                print("Successfully purchased item at detected position (Buy + Confirm)")
+                    print("[WARN] confirmBuy.jpg template not found.")
+                print("Successfully purchased item at detected position")
             else:
                 print("[WARN] Buy button not found near detected item. No click performed.")
         except Exception as e:
