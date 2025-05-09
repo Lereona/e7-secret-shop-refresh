@@ -64,5 +64,32 @@ This is a Python application to automate secret shop refreshes in the game Epic 
 - If you get errors about mouse positions, ensure you have set them using the "Get Position" buttons.
 - If you encounter other issues, check the status box for error messages and use the debug screenshots.
 
+## Building a Standalone Executable (Windows)
+
+You can create a standalone `.exe` so users do **not** need Python installed:
+
+### 1. Install PyInstaller
+```bash
+pip install pyinstaller
+```
+
+### 2. Use the provided build script (recommended)
+Create a file called `build.bat` in your project root with the following content:
+```bat
+@echo off
+REM Build a standalone executable for Epic 7 Secret Shop Refresher
+pyinstaller --noconfirm --onefile --windowed --add-data "assets;assets" --add-data "requirements.txt;." src/main.py
+pause
+```
+Run `build.bat` by double-clicking it or running it in a terminal.
+
+### 3. Find your executable
+- The output will be in the `dist` folder as `main.exe`.
+- Distribute `main.exe` and the `assets` folder (if you want users to edit images).
+
+### 4. For End Users
+- Download and unzip the release.
+- Double-click `main.exe` to run the bot. **No Python installation is required.**
+
 ## License
 MIT 
