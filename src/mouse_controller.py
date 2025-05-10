@@ -3,6 +3,16 @@ import time
 import cv2
 import numpy as np
 from config import Config
+import os
+import sys
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    if hasattr(sys, '_MEIPASS'):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 class MouseController:
     def __init__(self):
@@ -84,10 +94,12 @@ class MouseController:
 
     def purchase_item_at(self, item_x, item_y, item_w, item_h, click_func=None, **kwargs):
         try:
-            # Load the Buy button template
-            buy_template = cv2.imread('assets/templates/buy.jpg')
+            # Always use assets/templates/ for image paths
+            buy_template_path = resource_path(os.path.join('assets', 'templates', 'buy.jpg'))
+            confirm_buy_template_path = resource_path(os.path.join('assets', 'templates', 'confirmBuy.jpg'))
+            buy_template = cv2.imread(buy_template_path)
             if buy_template is None:
-                print("[ERROR] Could not load buy button template at assets/templates/buy.jpg")
+                print(f"[ERROR] Could not load buy button template at {buy_template_path}")
                 return
             # Take a screenshot of the window (before click)
             screenshot = pyautogui.screenshot()
@@ -112,7 +124,7 @@ class MouseController:
                     pyautogui.click(buy_x, buy_y)
                 time.sleep(self.config.click_delay)
                 # Take a fresh screenshot and detect confirmBuy button near the center of the screen
-                confirm_buy_template = cv2.imread('assets/templates/confirmBuy.jpg')
+                confirm_buy_template = cv2.imread(confirm_buy_template_path)
                 if confirm_buy_template is not None:
                     screenshot2 = pyautogui.screenshot()
                     screenshot2_bgr = cv2.cvtColor(np.array(screenshot2), cv2.COLOR_RGB2BGR)
@@ -128,17 +140,17 @@ class MouseController:
                     cb_threshold = 0.7
                     if max_val_cb >= cb_threshold:
                         cb_x = max_loc_cb[0] + confirm_buy_template.shape[1] // 2
-                        cb_y = region_y1 + max_loc_cb[1] + confirm_buy_template.shape[0] // 2
-                        print(f"Clicking confirmBuy at ({cb_x}, {cb_y})")
+                        cb_y = region_y1 + max_loc_cb[1] + confirm_buy_template.shape[0] // 2 + 50  # Shift 10 pixels lower
+                        print(f"Clicking confirmBuy at ({cb_x}, {cb_y}) (shifted 10px lower)")
                         if click_func:
                             click_func(cb_x, cb_y)
                         else:
                             pyautogui.click(cb_x, cb_y)
                         time.sleep(self.config.click_delay)
                     else:
-                        print("[WARN] confirmBuy button not found near center. Skipping confirmBuy click.")
+                        print(f"[WARN] {confirm_buy_template_path} template not found.")
                 else:
-                    print("[WARN] confirmBuy.jpg template not found.")
+                    print(f"[WARN] {confirm_buy_template_path} template not found.")
                 print("Successfully purchased item at detected position")
             else:
                 print("[WARN] Buy button not found near detected item. No click performed.")

@@ -11,6 +11,15 @@ from config import Config
 import re
 import keyboard  # Add this import at the top
 import pygetwindow as gw  # Add this import at the top
+import sys
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    if hasattr(sys, '_MEIPASS'):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 class SecretShopRefresherGUI:
     def __init__(self, root):
@@ -79,24 +88,17 @@ class SecretShopRefresherGUI:
     def load_item_images(self):
         print("Loading item images...")
         for image_name in self.image_names:
-            image_path = f'assets/templates/{image_name}'
+            image_path = resource_path(f'assets/templates/{image_name}')
             print(f"Attempting to load: {image_path}")
-            
             if os.path.exists(image_path):
                 try:
-                    # Load and resize image
                     img = Image.open(image_path)
-                    # Calculate new size maintaining aspect ratio
                     width, height = img.size
-                    max_size = 100  # Smaller size for the image
+                    max_size = 100
                     ratio = min(max_size/width, max_size/height)
                     new_size = (int(width*ratio), int(height*ratio))
-                    
-                    # Resize image
                     img = img.resize(new_size, Image.Resampling.LANCZOS)
                     photo = ImageTk.PhotoImage(img)
-                    
-                    # Store the photo
                     self.item_photos.append(photo)
                     print(f"Successfully loaded image: {image_path}")
                 except Exception as e:
